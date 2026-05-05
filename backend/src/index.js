@@ -4,8 +4,10 @@ const morgan = require('morgan');
 const multer = require('multer');
 const crypto = require('crypto');
 
-const { ensureDb, insertPdfUpload, sha256Hex } = require('./db');
-const { isPdfFile, extractPdfTextFromBuffer } = require('./pdf_utils');
+const { ensureDb, insertPdfUpload, insertExtractedFields, sha256Hex } = require('./db');
+const { isPdfFile, extractPdfTextFromBuffer, extractPdfFieldsFromOcrResult } = require('./pdf_utils');
+const { generateSummaryWithGemini } = require('./llm_utils');
+require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 
 const app = express();
 
@@ -40,28 +42,35 @@ app.post('/api/pdf-upload', upload.single('file'), async (req, res) => {
       res.status(400).json({ error: 'Only PDF files are allowed' });
       return;
     }
-
+    const pdfId = crypto.randomUUID();
     const id = crypto.randomUUID();
-    const sha256 = sha256Hex(buffer);
-    const ocrResult = await extractPdfTextFromBuffer(buffer, id);
-
+    const ocrResult = await extractPdfTextFromBuffer(buffer, pdfId);
+    const extractedFields = await extractPdfFieldsFromOcrResult(ocrResult);
+    const summary = await generateSummaryWithGemini(extractedFields);
     insertPdfUpload({
-      id,
+      id: pdfId,
       filename: originalname,
       mimeType: mimetype || 'application/pdf',
       size,
-      sha256,
       pdfKind: ocrResult.pdf_kind,
       extractionMethod: ocrResult.extraction_method,
       ocrText: ocrResult.text,
       data: buffer,
     });
 
-    res.status(200).json({
+    insertExtractedFields({
       id,
+      pdfId,
+      fields: extractedFields,
+      summary,
+    });
+
+    res.status(200).json({
+      id: pdfId,
       pdfKind: ocrResult.pdf_kind,
-      extractionMethod: ocrResult.extraction_method,
       textLength: (ocrResult.text || '').length,
+      extractedFields,
+      summary,
     });
   } catch (err) {
     console.error(err);
