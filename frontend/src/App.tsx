@@ -4,13 +4,26 @@ type UploadResponse = {
   id: string;
 };
 
+type ExtractResponse = {
+  pdfId: string;
+  extractedFields: Record<string, unknown>;
+  summary: string | null;
+};
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3002";
 
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState<"upload" | "extract" | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extractResult, setExtractResult] = useState<ExtractResponse | null>(
+    null,
+  );
 
   const fileSummary = useMemo(() => {
     if (!file) return null;
@@ -20,6 +33,8 @@ export default function App() {
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setExtractError(null);
+    setExtractResult(null);
     setUploadedId(null);
 
     if (!file) {
@@ -35,29 +50,66 @@ export default function App() {
       return;
     }
 
-    setIsUploading(true);
+    let uploadSucceeded = false;
+
+    setIsProcessing(true);
+    setProcessingStep("upload");
+
     try {
       const formData = new FormData();
       formData.append("file", file);
 
-      const resp = await fetch(`${BACKEND_URL}/api/pdf-upload`, {
+      const uploadResp = await fetch(`${BACKEND_URL}/api/pdf-upload`, {
         method: "POST",
         body: formData,
       });
 
-      if (!resp.ok) {
-        const msg = await resp.text().catch(() => "");
-        throw new Error(msg || `Upload failed with status ${resp.status}`);
+      if (!uploadResp.ok) {
+        const msg = await uploadResp.text().catch(() => "");
+        throw new Error(msg || `Upload failed with status ${uploadResp.status}`);
       }
 
-      const data = (await resp.json()) as UploadResponse;
-      setUploadedId(data.id);
+      const uploadData = (await uploadResp.json()) as UploadResponse;
+      setUploadedId(uploadData.id);
+      uploadSucceeded = true;
+
+      setProcessingStep("extract");
+
+      const extractResp = await fetch(`${BACKEND_URL}/api/pdf-extract-fields`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfId: uploadData.id }),
+      });
+
+      if (!extractResp.ok) {
+        const msg = await extractResp.text().catch(() => "");
+        throw new Error(
+          msg || `Extraction failed with status ${extractResp.status}`,
+        );
+      }
+
+      const extractData = (await extractResp.json()) as ExtractResponse;
+      setExtractResult(extractData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      const message =
+        err instanceof Error ? err.message : "Request failed";
+      if (uploadSucceeded) {
+        setExtractError(message);
+      } else {
+        setError(message);
+      }
     } finally {
-      setIsUploading(false);
+      setIsProcessing(false);
+      setProcessingStep(null);
     }
   }
+
+  const submitLabel =
+    processingStep === "extract"
+      ? "Extracting…"
+      : processingStep === "upload"
+        ? "Uploading…"
+        : "Upload";
 
   return (
     <div
@@ -67,10 +119,9 @@ export default function App() {
         margin: "48px auto",
       }}
     >
-      <h1 style={{ marginBottom: 12 }}>Upload PDF</h1>
+      <h1 style={{ marginBottom: 12 }}>Insurance Document Summarizer</h1>
       <p style={{ marginTop: 0, color: "#444" }}>
-        Select a PDF file. The backend will store it in a SQLite database (as a
-        BLOB).
+        Select an insurance policy file and upload.
       </p>
 
       <form onSubmit={onUpload} style={{ display: "grid", gap: 12 }}>
@@ -89,10 +140,10 @@ export default function App() {
 
         <button
           type="submit"
-          disabled={isUploading}
+          disabled={isProcessing}
           style={{ padding: "10px 14px" }}
         >
-          {isUploading ? "Uploading…" : "Upload"}
+          {submitLabel}
         </button>
       </form>
 
@@ -102,9 +153,37 @@ export default function App() {
         </div>
       ) : null}
 
-      {uploadedId ? (
-        <div style={{ marginTop: 16, color: "#0b6b1f" }}>
-          <strong>Uploaded:</strong> {uploadedId}
+      {processingStep === "extract" ? (
+        <div style={{ marginTop: 16, color: "#333" }}>
+          Extracting fields and generating summary…
+        </div>
+      ) : null}
+
+      {extractError ? (
+        <div style={{ marginTop: 16, color: "#b00020" }}>
+          <strong>Extraction error:</strong> {extractError}
+        </div>
+      ) : null}
+
+      {extractResult ? (
+        <div style={{ marginTop: 20 }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: 8 }}>Summary</h2>
+          <p style={{ marginTop: 0, whiteSpace: "pre-wrap", color: "#222" }}>
+            {extractResult.summary || "(none)"}
+          </p>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: 8 }}>Extracted fields</h2>
+          <pre
+            style={{
+              margin: 0,
+              padding: 12,
+              background: "#f5f5f5",
+              borderRadius: 8,
+              overflow: "auto",
+              fontSize: 13,
+            }}
+          >
+            {JSON.stringify(extractResult.extractedFields, null, 2)}
+          </pre>
         </div>
       ) : null}
     </div>

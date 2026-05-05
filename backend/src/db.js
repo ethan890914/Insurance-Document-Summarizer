@@ -1,7 +1,6 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const SQLITE_PATH =
   process.env.SQLITE_PATH ||
@@ -161,14 +160,24 @@ function insertExtractedFields({
   });
 }
 
-function sha256Hex(buffer) {
-  return crypto.createHash('sha256').update(buffer).digest('hex');
+function getPdfUploadById(id) {
+  const database = ensureDb();
+  const row = database
+    .prepare(
+      `
+    SELECT id, ocr_text AS ocrText, pdf_kind AS pdfKind
+    FROM pdf_uploads
+    WHERE id = ?
+  `,
+    )
+    .get(id);
+  return row || null;
 }
 
 module.exports = {
   ensureDb,
   insertPdfUpload,
   insertExtractedFields,
-  sha256Hex,
+  getPdfUploadById,
 };
 

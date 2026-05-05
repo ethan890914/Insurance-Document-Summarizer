@@ -4,7 +4,12 @@ const morgan = require('morgan');
 const multer = require('multer');
 const crypto = require('crypto');
 
-const { ensureDb, insertPdfUpload, insertExtractedFields, sha256Hex } = require('./db');
+const {
+  ensureDb,
+  insertPdfUpload,
+  insertExtractedFields,
+  getPdfUploadById,
+} = require('./db');
 const { isPdfFile, extractPdfTextFromBuffer, extractPdfFieldsFromOcrResult } = require('./pdf_utils');
 const { generateSummaryWithGemini } = require('./llm_utils');
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
@@ -43,10 +48,7 @@ app.post('/api/pdf-upload', upload.single('file'), async (req, res) => {
       return;
     }
     const pdfId = crypto.randomUUID();
-    const id = crypto.randomUUID();
     const ocrResult = await extractPdfTextFromBuffer(buffer, pdfId);
-    const extractedFields = await extractPdfFieldsFromOcrResult(ocrResult);
-    const summary = await generateSummaryWithGemini(extractedFields);
     insertPdfUpload({
       id: pdfId,
       filename: originalname,
@@ -58,27 +60,52 @@ app.post('/api/pdf-upload', upload.single('file'), async (req, res) => {
       data: buffer,
     });
 
-    insertExtractedFields({
-      id,
-      pdfId,
-      fields: extractedFields,
-      summary,
-    });
-
-    res.status(200).json({
-      id: pdfId,
-      pdfKind: ocrResult.pdf_kind,
-      textLength: (ocrResult.text || '').length,
-      extractedFields,
-      summary,
-    });
+    res.status(200).json({ id: pdfId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: `Upload failed: ${err.message}` });
   }
 });
 
-const port = process.env.PORT ? Number(process.env.PORT) : 3002;
+app.post('/api/pdf-extract-fields', async (req, res) => {
+  try {
+    const pdfId = req.body.pdfId
+
+    if (!pdfId) {
+      res.status(400).json({ error: 'Missing pdfId in JSON body' });
+      return;
+    }
+
+    const row = getPdfUploadById(pdfId);
+    if (!row) {
+      res.status(404).json({ error: 'PDF not found' });
+      return;
+    }
+
+    const ocrText = row.ocrText || '';
+    const extractedFields = await extractPdfFieldsFromOcrResult(ocrText);
+    const summary = await generateSummaryWithGemini(extractedFields);
+
+    const fieldsRowId = crypto.randomUUID();
+    insertExtractedFields({
+      id: fieldsRowId,
+      pdfId,
+      fields: extractedFields,
+      summary,
+    });
+
+    res.status(200).json({
+      pdfId,
+      extractedFields,
+      summary,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: `Field extraction failed: ${err.message}` });
+  }
+});
+
+port = 3002
 
 ensureDb();
 app.listen(port, () => {
