@@ -62,7 +62,7 @@ export default function App() {
     setProcessedError(null);
     setProcessedLoading(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/extracted-fields`);
+      const resp = await fetch(`${BACKEND_URL}/api/documents`);
       if (!resp.ok) {
         const msg = await resp.text().catch(() => "");
         throw new Error(msg || `List failed with status ${resp.status}`);

@@ -1,11 +1,24 @@
 # Insurance-Document-Summarizer
 
-## Quick PDF Upload (end-to-end)
+## Overview
 
-This is a minimal end-to-end system:
+This system contains end-to-end component:
 
-- `frontend/`: React app to upload a PDF
-- `backend/`: Express API that receives the upload, runs text extraction, and stores everything in SQLite
+- `frontend/`: React app to upload a PDF and view the results
+- `backend/`: Express API that receives the upload, runs text extraction, generates summary, and stores everything in SQLite
+
+### Design Architecture
+
+![image](./diagram.png)
+
+## API
+
+See full API documentation: [api.md](./api.md)
+
+1. Upload PDF: `/api/pdf-upload`
+2. Extract fields: `/api/pdf-extract-fields`
+3. Fetch results: `/api/extracted-fields/:id`
+4. List resultsL `api/documents`
 
 ### Run
 
@@ -21,18 +34,3 @@ This is a minimal end-to-end system:
    - `npm --prefix ./backend run dev` (listens on `http://localhost:3002`)
 4. Start frontend:
    - `npm --prefix ./frontend run dev` (Vite on `http://localhost:5173`)
-
-### API
-
-- `POST /api/pdf-upload`
-  - `multipart/form-data` with field name `file`
-  - Processing:
-    1. detect native vs scanned PDF
-    2. native: `pdfplumber`
-    3. scanned: `pdf2image + pytesseract`
-    4. save extracted text in SQLite
-  - Response includes:
-    - `id`
-    - `pdfKind`
-    - `extractionMethod`
-    - `textLength`
