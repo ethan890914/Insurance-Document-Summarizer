@@ -186,13 +186,11 @@ async function extractPdfFieldsFromOcrResult(ocrResultOrText) {
       .slice(Math.max(0, m.index - 40), m.index)
       .toLowerCase();
     let label;
-    if (/effective|inception|from/.test(context)) {
-      label = "effective_date";
-    } else if (/expiration|expiry|to\b|until|through/.test(context)) {
+    if (/expiration|expiry|to\b|until|through/.test(context)) {
       label = "expiration_date";
-    } else if (/policy/.test(context)) {
+    } else if (/effective|inception|from|policy/.test(context)) {
       label = "effective_date";
-    }
+    } 
     if (label) {
       results[label] = normalizeDate(m[1]);
     }
