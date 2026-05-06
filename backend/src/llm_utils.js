@@ -46,7 +46,7 @@ async function extractCoverageAndExclusionsWithGemini({
     apiKey: process.env.GEMINI_API_KEY,
   });
 
-  const model = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   const prompt = [
     "You are extracting insurance policy fields from OCR text.",

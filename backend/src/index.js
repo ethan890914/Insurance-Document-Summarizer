@@ -9,6 +9,8 @@ const {
   insertPdfUpload,
   insertExtractedFields,
   getPdfUploadById,
+  listExtractedFieldsSummary,
+  getExtractedFieldsById,
 } = require('./db');
 const { isPdfFile, extractPdfTextFromBuffer, extractPdfFieldsFromOcrResult } = require('./pdf_utils');
 const { generateSummaryWithGemini } = require('./llm_utils');
@@ -30,6 +32,37 @@ const upload = multer({
 
 app.get('/healthz', (req, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/extracted-fields', (req, res) => {
+  try {
+    const raw = req.query.limit;
+    const limit =
+      raw === undefined || raw === ''
+        ? 100
+        : Number.parseInt(String(raw), 10);
+    const items = listExtractedFieldsSummary({
+      limit: Number.isFinite(limit) ? limit : 100,
+    });
+    res.json({ items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: `List failed: ${err.message}` });
+  }
+});
+
+app.get('/api/extracted-fields/:id', (req, res) => {
+  try {
+    const row = getExtractedFieldsById(req.params.id);
+    if (!row) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: `Load failed: ${err.message}` });
+  }
 });
 
 app.post('/api/pdf-upload', upload.single('file'), async (req, res) => {
@@ -105,7 +138,7 @@ app.post('/api/pdf-extract-fields', async (req, res) => {
   }
 });
 
-port = 3002
+const port = process.env.PORT ? Number(process.env.PORT) : 3002;
 
 ensureDb();
 app.listen(port, () => {

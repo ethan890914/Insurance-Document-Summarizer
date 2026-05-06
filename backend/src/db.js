@@ -174,10 +174,93 @@ function getPdfUploadById(id) {
   return row || null;
 }
 
+function parseStoredJson(value) {
+  if (value == null || value === '') return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function listExtractedFieldsSummary({ limit = 100 } = {}) {
+  const database = ensureDb();
+  const cap = Math.min(500, Math.max(1, Number(limit) || 100));
+  const rows = database
+    .prepare(
+      `
+    SELECT
+      ef.id AS id,
+      u.filename AS filename,
+      u.created_at AS uploaded_at
+    FROM extracted_fields ef
+    INNER JOIN pdf_uploads u ON u.id = ef.pdf_id
+    ORDER BY datetime(u.created_at) DESC
+    LIMIT ?
+  `,
+    )
+    .all(cap);
+
+  return rows.map((r) => ({
+    id: r.id,
+    filename: r.filename,
+    uploadedAt: r.uploaded_at,
+  }));
+}
+
+function getExtractedFieldsById(extractedFieldsId) {
+  const database = ensureDb();
+  const r = database
+    .prepare(
+      `
+    SELECT
+      ef.id,
+      ef.pdf_id,
+      ef.effective_date,
+      ef.expiration_date,
+      ef.policy_number,
+      ef.total_premium,
+      ef.named_insured,
+      ef.coverage_limits,
+      ef.exclusions,
+      ef.summary,
+      ef.created_at AS processed_at,
+      u.filename,
+      u.created_at AS uploaded_at
+    FROM extracted_fields ef
+    INNER JOIN pdf_uploads u ON u.id = ef.pdf_id
+    WHERE ef.id = ?
+  `,
+    )
+    .get(extractedFieldsId);
+
+  if (!r) return null;
+
+  return {
+    id: r.id,
+    pdfId: r.pdf_id,
+    filename: r.filename,
+    uploadedAt: r.uploaded_at,
+    processedAt: r.processed_at,
+    summary: r.summary,
+    extractedFields: {
+      effective_date: r.effective_date,
+      expiration_date: r.expiration_date,
+      policy_number: r.policy_number,
+      total_premium: r.total_premium,
+      named_insured: r.named_insured,
+      coverage_limits: parseStoredJson(r.coverage_limits),
+      exclusions: parseStoredJson(r.exclusions),
+    },
+  };
+}
+
 module.exports = {
   ensureDb,
   insertPdfUpload,
   insertExtractedFields,
   getPdfUploadById,
+  listExtractedFieldsSummary,
+  getExtractedFieldsById,
 };
 
